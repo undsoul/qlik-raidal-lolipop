@@ -2,6 +2,10 @@
 
 A Qlik Sense visualization extension that fans your items around a large arc.
 
+![Radial Lollipop — Carbon Clock mode (left) and minimal spike mode (right), same extension, real 2024 CO2 data](docs/showcase-carbon-clock-and-spike.png)
+
+*Left: dual-measure "Carbon Clock" mode — outward spikes (CO2 per capita), inward sticks + bubbles (total CO2, bubble = population), weighted group ring, reading guide, wrapped stamp. Right: the same extension as a minimal dark spike chart — ring and dots hidden, stamp centered, background extended to the object edge.*
+
 Items are laid out as contiguous angular blocks — one block per group — sitting on a thin
 donut ring band coloured by group. Every item is a lollipop: a thin radial stick pointing
 outward from the ring with a small dot at its tip. The few highest ranked items are drawn
