@@ -1,0 +1,14 @@
+{
+    "name": "Radial Lollipop",
+    "description": "Radial lollipop chart for Qlik Sense - items fanned around an arc, grouped into colored category segments on a donut ring band. Top-N mode gives each item an outward stick with a dot and highlights the largest inward with bubbles and labels; dual-measure mode (Carbon Clock) encodes three measures at once - outward spike, inward stick plus bubble, and bubble size.",
+    "type": "visualization",
+    "version": "2.2.1",
+    "author": "MuchachoAI",
+    "icon": "puzzle",
+    "preview": "",
+    "keywords": "radial, lollipop, radial lollipop, arc, ranking, visualization, d3",
+    "license": "MIT",
+    "dependencies": {
+        "qlik-sense": ">=3.0.x"
+    }
+}
