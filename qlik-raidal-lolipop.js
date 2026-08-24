@@ -104,6 +104,19 @@ define([
             if (!self._localSelections) {
                 self._localSelections = new Set();
             }
+            // Same idea for the group dimension: during a PENDING dim-2 selection
+            // Qlik hands us no S states at all, so the ring needs its own local
+            // echo exactly like the items have.
+            if (!self._localGroupSelections) {
+                self._localGroupSelections = new Set();
+            }
+
+            // A click repaints synchronously with the SAME cached layout object, in
+            // which qSelectionInfo has not caught up yet. Read the flag here and
+            // reset it immediately, so it can never survive a paint and can only
+            // ever suppress the session clear for that one echo repaint.
+            var isLocalEcho = self._localEcho === true;
+            self._localEcho = false;
 
             // Note: We don't block on _fetchingColors anymore
             // Instead we render with fallback colors and repaint when master colors arrive
@@ -350,31 +363,52 @@ define([
             // Check for active Qlik selections
             var hasQlikSelection = DataUtils.hasActiveSelection(matrix, dimensionCount);
 
-            // Clear local selections when Qlik selection state changes
-            // This ensures colors return to normal when selections are cleared
+            // Qlik's selection-SESSION signal. Pending selections leave every
+            // qState at 'O', so hasQlikSelection can never flip during one and the
+            // old guard below could never fire - the local sets were immortal.
+            // qInSelections is the reliable "the user is still choosing" flag: once
+            // the session ends, cancelled OR confirmed, the local echo has done its
+            // job. A confirmed selection then drives the visuals from real qStates.
+            var inSelections = !!(layout.qSelectionInfo && layout.qSelectionInfo.qInSelections);
+
+            if (!inSelections && !isLocalEcho &&
+                (self._localSelections.size > 0 || self._localGroupSelections.size > 0)) {
+                debugLog('Selection session ended - clearing local echo');
+                self._localSelections.clear();
+                self._localGroupSelections.clear();
+            }
+
+            // Belt: also clear when Qlik's own selection state goes away
             if (!hasQlikSelection && self._hadQlikSelection) {
                 self._localSelections.clear();
+                self._localGroupSelections.clear();
             }
             self._hadQlikSelection = hasQlikSelection;
 
             // Render the radial lollipop chart with selection state
             self._renderer.render(model, settings, colorScale, {
                 localSelections: self._localSelections,
+                localGroupSelections: self._localGroupSelections,
                 hasQlikSelection: hasQlikSelection,
                 onSelect: function(dimIndex, elem, name) {
                     debugLog('Selection: dim', dimIndex, elem, name);
 
-                    // The local set gives dimension-1 items immediate feedback while
-                    // Qlik round-trips. Group (dimension-2) clicks skip it: the
-                    // hypercube refilters and the repaint reflects the new state
-                    // directly, so a local echo would only risk disagreeing with it.
-                    if (dimIndex === 0) {
-                        if (self._localSelections.has(name)) {
-                            self._localSelections.delete(name);
-                        } else {
-                            self._localSelections.add(name);
-                        }
+                    // Both dimensions keep a local echo for immediate feedback:
+                    // a PENDING selection arrives with every cell still 'O', so
+                    // without this nothing would dim until the user confirms.
+                    var localSet = (dimIndex === 1)
+                        ? self._localGroupSelections
+                        : self._localSelections;
+
+                    if (localSet.has(name)) {
+                        localSet.delete(name);
+                    } else {
+                        localSet.add(name);
                     }
+
+                    // The repaint below is our own synchronous echo: it reuses this
+                    // same layout object, whose qSelectionInfo has not caught up.
+                    self._localEcho = true;
 
                     // Tell Qlik to select
                     self.selectValues(dimIndex, [elem], true);

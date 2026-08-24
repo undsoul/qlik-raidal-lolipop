@@ -1219,14 +1219,37 @@ define([
         var backgroundColor = ColorUtils.getColor(settings.backgroundColor, CONSTANTS.COLORS.BACKGROUND);
         var textColor = ColorUtils.getContrastColor(backgroundColor);
 
+        // The group dimension carries its own selection state. A pending group
+        // selection marks the dim-2 cells S/L while the item cells stay 'O', so
+        // this must be consulted before falling back to the items.
+        function groupStateSelected(group) {
+            var state = group && group.groupState;
+            return state === 'S' || state === 'L';
+        }
+
         var localSelections = callbacks.localSelections || new Set();
+        var localGroupSelections = callbacks.localGroupSelections || new Set();
         var hasQlikSelection = !!callbacks.hasQlikSelection;
         var hasLocalSelections = localSelections.size > 0;
-        var selectionActive = hasLocalSelections || hasQlikSelection;
+        var hasLocalGroupSelections = localGroupSelections.size > 0;
 
-        // A group counts as selected when any of its items is selected - by Qlik
-        // state or by the local (immediate-feedback) set.
+        // Declared BEFORE selectionActive: it is a var, so reading it earlier
+        // would see undefined and silently disable all dimming.
+        var hasGroupSelection = (data.groups || []).some(function(group) {
+            return groupStateSelected(group);
+        });
+
+        var selectionActive = hasLocalSelections || hasLocalGroupSelections ||
+            hasQlikSelection || hasGroupSelection;
+
+        // A group counts as selected by its OWN dim-2 state first, then by any of
+        // its items being selected - by Qlik state or by the local set.
         function groupIsSelected(group) {
+            if (groupStateSelected(group)) return true;
+            // Local echo: a pending group click before Qlik reports any state
+            if (hasLocalGroupSelections && group && localGroupSelections.has(group.name)) {
+                return true;
+            }
             var items = (group && group.items) || [];
             for (var i = 0; i < items.length; i++) {
                 if (items[i].isSelected) return true;
@@ -1240,14 +1263,21 @@ define([
             return groupIsSelected(group) ? 0.95 : POP.DESELECTED_OPACITY;
         }
 
-        function itemOpacity(item) {
+        // An item is lit when the item itself is selected OR its group is - a
+        // union, so a group selection lights all of its items and a mixed
+        // selection never blanks one out.
+        function itemOpacity(item, group) {
             if (hasLocalSelections) {
                 return localSelections.has(item.name) ? 1 : POP.DESELECTED_OPACITY;
             }
-            if (hasQlikSelection) {
-                return item.isSelected ? 1 : POP.DESELECTED_OPACITY;
+            if (!selectionActive) return 1;
+            if (item.isSelected) return 1;
+            if (groupStateSelected(group)) return 1;
+            // A locally-clicked group lights every item it holds
+            if (hasLocalGroupSelections && group && localGroupSelections.has(group.name)) {
+                return 1;
             }
-            return 1;
+            return POP.DESELECTED_OPACITY;
         }
 
         // ---- Shared inward geometry (top-N highlight and dual mode) -----
@@ -1587,7 +1617,13 @@ define([
                 .attr('y2', function(d) { return polarToXY(ringInnerOf(d.group.name), d.angle)[1]; })
                 .attr('stroke', function(d) { return groupColor(d.group.name); })
                 .attr('stroke-width', 1)
-                .attr('stroke-opacity', POP.TICK_OPACITY);
+                .attr('stroke-opacity', function(d) {
+                    // Ticks dim with the segment they belong to
+                    if (!selectionActive) return POP.TICK_OPACITY;
+                    return groupIsSelected(d.group)
+                        ? POP.TICK_OPACITY
+                        : POP.TICK_OPACITY * POP.DESELECTED_OPACITY;
+                });
         }
 
         // Outward stick width: dual mode defaults thicker, but an explicit
@@ -1614,7 +1650,7 @@ define([
             .append('g')
             .attr('class', 'lollipop-item')
             .style('cursor', 'pointer')
-            .style('opacity', function(d) { return itemOpacity(d.item); });
+            .style('opacity', function(d) { return itemOpacity(d.item, d.group); });
 
         itemGroups.append('line')
             .attr('class', 'lollipop-stick')
@@ -1692,7 +1728,7 @@ define([
                 .append('g')
                 .attr('class', 'lollipop-item lollipop-top-item')
                 .style('cursor', 'pointer')
-                .style('opacity', function(d) { return itemOpacity(d.item); });
+                .style('opacity', function(d) { return itemOpacity(d.item, d.group); });
 
             topItemGroups.append('line')
                 .attr('class', 'lollipop-stick lollipop-top-stick')
@@ -1939,7 +1975,7 @@ define([
             .append('g')
             .attr('class', 'lollipop-item lollipop-inward-item')
             .style('cursor', 'pointer')
-            .style('opacity', function(d) { return ctx.itemOpacity(d.item); });
+            .style('opacity', function(d) { return ctx.itemOpacity(d.item, d.group); });
 
         inwardGroups.append('line')
             .attr('class', 'lollipop-stick lollipop-inward-stick')

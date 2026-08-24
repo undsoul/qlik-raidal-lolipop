@@ -223,10 +223,20 @@ define([
      * Check if there's an active selection in the data
      */
     function hasActiveSelection(matrix, dimensionCount) {
+        // Scans EVERY dimension column, not just the first. A pending selection on
+        // the group dimension leaves the item cells at 'O', so looking only at
+        // column 0 reported "no selection" and nothing dimmed.
+        var columns = (typeof dimensionCount === 'number' && dimensionCount > 0)
+            ? dimensionCount : 1;
+
         for (var i = 0; i < matrix.length; i++) {
-            var state = matrix[i][0].qState;
-            if (state && state !== 'O') {
-                return true;
+            var row = matrix[i];
+            if (!row) continue;
+            for (var c = 0; c < columns; c++) {
+                var cell = row[c];
+                if (cell && cell.qState && cell.qState !== 'O') {
+                    return true;
+                }
             }
         }
         return false;
