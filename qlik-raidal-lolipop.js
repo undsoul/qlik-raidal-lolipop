@@ -361,18 +361,23 @@ define([
             self._renderer.render(model, settings, colorScale, {
                 localSelections: self._localSelections,
                 hasQlikSelection: hasQlikSelection,
-                onSelect: function(elem, name, toggle) {
-                    debugLog('Selection:', elem, name, toggle);
+                onSelect: function(dimIndex, elem, name) {
+                    debugLog('Selection: dim', dimIndex, elem, name);
 
-                    // Toggle local selection for immediate feedback
-                    if (self._localSelections.has(name)) {
-                        self._localSelections.delete(name);
-                    } else {
-                        self._localSelections.add(name);
+                    // The local set gives dimension-1 items immediate feedback while
+                    // Qlik round-trips. Group (dimension-2) clicks skip it: the
+                    // hypercube refilters and the repaint reflects the new state
+                    // directly, so a local echo would only risk disagreeing with it.
+                    if (dimIndex === 0) {
+                        if (self._localSelections.has(name)) {
+                            self._localSelections.delete(name);
+                        } else {
+                            self._localSelections.add(name);
+                        }
                     }
 
                     // Tell Qlik to select
-                    self.selectValues(0, [elem], toggle);
+                    self.selectValues(dimIndex, [elem], true);
 
                     // Repaint for immediate visual feedback
                     self.paint($element, layout);

@@ -176,8 +176,11 @@ Dimension 2), or a single color, plus the chart background.
 
 ## Selections
 
-Click any lollipop to select its Dimension 1 value. While a selection is active,
-unselected items dim to 25% opacity.
+Click any lollipop to select its Dimension 1 value. Click a ring segment to select that
+group's Dimension 2 value — the hypercube refilters and the remaining group spreads
+across the full sweep, which is the chart zooming into that group. Ring segments are only
+clickable when a group dimension is present. While a selection is active, unselected
+items and unselected group segments dim to 25% opacity.
 
 ## Install
 

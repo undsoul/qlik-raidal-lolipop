@@ -136,6 +136,10 @@ define([
                     name: groupName,
                     color: itemColor,
                     total: 0,
+                    // Identity of the group's own dimension-2 cell, so the ring
+                    // segment can select it. Identical across the group's rows.
+                    groupElemNo: (hasGroupDim && row[1]) ? row[1].qElemNumber : null,
+                    groupState: (hasGroupDim && row[1]) ? (row[1].qState || 'O') : null,
                     items: []
                 };
                 groupOrder.push(groupMap[groupName]);

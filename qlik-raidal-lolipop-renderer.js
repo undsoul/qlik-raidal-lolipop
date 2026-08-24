@@ -1054,6 +1054,8 @@ define([
         // so they are resolved here rather than further down.
         var hasMeasure2 = !!data.hasMeasure2;
         var hasMeasure3 = !!data.hasMeasure3;
+        // A real second dimension is what makes the ring selectable
+        var hasGroupDim = !!data.hasGroupDim;
         var measureCount = num(data.measureCount, hasMeasure2 ? 2 : 1);
         var vizMode = resolveVizMode(settings, measureCount);
         var isDual = vizMode === CONSTANTS.VIZ_MODES.DUAL;
@@ -1221,6 +1223,22 @@ define([
         var hasQlikSelection = !!callbacks.hasQlikSelection;
         var hasLocalSelections = localSelections.size > 0;
         var selectionActive = hasLocalSelections || hasQlikSelection;
+
+        // A group counts as selected when any of its items is selected - by Qlik
+        // state or by the local (immediate-feedback) set.
+        function groupIsSelected(group) {
+            var items = (group && group.items) || [];
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].isSelected) return true;
+                if (hasLocalSelections && localSelections.has(items[i].name)) return true;
+            }
+            return false;
+        }
+
+        function ringOpacity(group) {
+            if (!selectionActive) return 0.95;
+            return groupIsSelected(group) ? 0.95 : POP.DESELECTED_OPACITY;
+        }
 
         function itemOpacity(item) {
             if (hasLocalSelections) {
@@ -1522,7 +1540,7 @@ define([
         // Ring band is optional; r0/ringOuter stay in the geometry either way so
         // sticks, ticks and scales are unaffected by hiding it.
         if (settings.showRing !== false) {
-            this.mainGroup.append('g')
+            var ringSegments = this.mainGroup.append('g')
                 .attr('class', 'lollipop-ring')
                 .selectAll('.lollipop-ring-segment')
                 .data(layout.groups)
@@ -1540,7 +1558,14 @@ define([
                     });
                 })
                 .attr('fill', function(d) { return groupColor(d.name); })
-                .attr('fill-opacity', 0.95);
+                .attr('fill-opacity', function(d) { return ringOpacity(d.group); })
+                .style('cursor', hasGroupDim ? 'pointer' : null);
+
+            // Only a real second dimension is selectable; a synthetic single group
+            // has no dim-2 cell behind it, so its ring stays inert.
+            if (hasGroupDim) {
+                this.attachRingInteractions(ringSegments, settings, callbacks, selectionActive);
+            }
         }
 
         // ---- Clock texture: ticks on the ring's inner edge ---------------
@@ -2118,7 +2143,8 @@ define([
         selection
             .on('click', function(event, d) {
                 if (callbacks && callbacks.onSelect && d.item.elemNo !== undefined) {
-                    callbacks.onSelect(d.item.elemNo, d.item.name, true);
+                    // dimension 0 = the item dimension
+                    callbacks.onSelect(0, d.item.elemNo, d.item.name);
                 }
             })
             .on('mouseover', function(event, d) {
@@ -2140,6 +2166,68 @@ define([
                 }
                 self.tooltip.style('opacity', 0);
             });
+    };
+
+    /**
+     * Ring segments select the GROUP dimension (dimension 1).
+     *
+     * Attached to the individual arc paths, not to their container group, and the
+     * ring is drawn before the sticks and dots - so a click that lands on a stick
+     * hits the stick, never the arc beneath it. The two paths are siblings rather
+     * than nested, so no stopPropagation is needed to keep them from double-firing.
+     */
+    RadialLollipopRenderer.prototype.attachRingInteractions = function(selection, settings, callbacks, selectionActive) {
+        var self = this;
+        var d3 = this.d3;
+
+        selection
+            .on('click', function(event, d) {
+                var group = d.group || {};
+                if (callbacks && callbacks.onSelect &&
+                    group.groupElemNo !== undefined && group.groupElemNo !== null) {
+                    // dimension 1 = the group dimension
+                    callbacks.onSelect(1, group.groupElemNo, d.name);
+                }
+            })
+            .on('mouseover', function(event, d) {
+                if (!selectionActive) {
+                    d3.select(this).attr('fill-opacity', 1);
+                }
+                if (settings.showTooltip !== false) {
+                    self.showRingTooltip(event, d);
+                }
+            })
+            .on('mousemove', function(event) {
+                if (self.tooltip) {
+                    self.tooltip
+                        .style('left', (event.pageX + 15) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                }
+            })
+            .on('mouseout', function(event, d) {
+                if (!selectionActive) {
+                    d3.select(this).attr('fill-opacity', 0.95);
+                }
+                if (self.tooltip) self.tooltip.style('opacity', 0);
+            });
+    };
+
+    /**
+     * Tooltip for a ring segment: the group and how many items it holds
+     */
+    RadialLollipopRenderer.prototype.showRingTooltip = function(event, d) {
+        if (!this.tooltip) return;
+
+        var group = d.group || {};
+        var count = (group.items || []).length;
+        var html = '<strong>' + escapeHtml(d.name) + '</strong>' +
+            '<br><span style="color:#aaa">' + count + (count === 1 ? ' item' : ' items') + '</span>';
+
+        this.tooltip
+            .html(html)
+            .style('opacity', 1)
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 10) + 'px');
     };
 
     /**
